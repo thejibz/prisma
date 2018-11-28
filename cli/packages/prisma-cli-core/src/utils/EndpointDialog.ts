@@ -1,77 +1,81 @@
-import { Output, Client, Config, getPing } from 'prisma-cli-engine'
-import * as inquirer from 'inquirer'
-import chalk from 'chalk'
-import { Cluster, Environment, PrismaDefinitionClass } from 'prisma-yml'
+import { Output, Client, Config, getPing } from "prisma-cli-engine";
+import * as inquirer from "inquirer";
+import chalk from "chalk";
+import { Cluster, Environment, PrismaDefinitionClass } from "prisma-yml";
 import {
   concatName,
   defaultDataModel,
   defaultDockerCompose,
-  prettyTime,
-} from '../util'
-import * as sillyname from 'sillyname'
-import * as path from 'path'
-import * as fs from 'fs'
-import { Introspector, PostgresConnector, MysqlConnector } from 'prisma-db-introspection'
-import * as yaml from 'js-yaml'
-import { Client as PGClient } from 'pg'
+  prettyTime
+} from "../util";
+import * as sillyname from "sillyname";
+import * as path from "path";
+import * as fs from "fs";
+import {
+  Introspector,
+  PostgresConnector,
+  MysqlConnector
+} from "prisma-db-introspection";
+import * as yaml from "js-yaml";
+import { Client as PGClient } from "pg";
 
 export interface GetEndpointParams {
-  folderName: string
+  folderName: string;
 }
 
-export type DatabaseType = 'postgres' | 'mysql' | 'mongo'
+export type DatabaseType = "postgres" | "mysql" | "mongo";
 
 export interface DatabaseCredentials {
-  type: DatabaseType
-  host: string
-  port: number
-  user: string
-  password: string
-  database?: string
-  alreadyData?: boolean
-  schema?: string
-  ssl?: boolean
+  type: DatabaseType;
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database?: string;
+  alreadyData?: boolean;
+  schema?: string;
+  ssl?: boolean;
 }
 
 export interface GetEndpointResult {
-  endpoint: string
-  cluster: Cluster | undefined
-  workspace: string | undefined
-  service: string
-  stage: string
-  localClusterRunning: boolean
-  database?: DatabaseCredentials
-  dockerComposeYml: string
-  datamodel: string
-  newDatabase: boolean
-  managementSecret?: string
-  writeDockerComposeYml: boolean
-  generator?: string
+  endpoint: string;
+  cluster: Cluster | undefined;
+  workspace: string | undefined;
+  service: string;
+  stage: string;
+  localClusterRunning: boolean;
+  database?: DatabaseCredentials;
+  dockerComposeYml: string;
+  datamodel: string;
+  newDatabase: boolean;
+  managementSecret?: string;
+  writeDockerComposeYml: boolean;
+  generator?: string;
 }
 
 export interface HandleChoiceInput {
-  choice: string
-  loggedIn: boolean
-  folderName: string
-  localClusterRunning: boolean
-  clusters?: Cluster[]
+  choice: string;
+  loggedIn: boolean;
+  folderName: string;
+  localClusterRunning: boolean;
+  clusters?: Cluster[];
 }
 
 const encodeMap = {
-  'prisma-eu1': 'demo-eu1',
-  'prisma-us1': 'demo-us1',
-}
+  "prisma-eu1": "demo-eu1",
+  "prisma-us1": "demo-us1"
+};
 
 const decodeMap = {
-  'demo-eu1': 'prisma-eu1',
-  'demo-us1': 'prisma-us1',
-}
+  "demo-eu1": "prisma-eu1",
+  "demo-us1": "prisma-us1"
+};
 
 const defaultPorts = {
   postgres: 5432,
   mysql: 3306,
-  mongo: 27017,
-}
+  mongo: 27017
+};
 
 const databaseServiceDefinitions = {
   postgres: `
@@ -109,79 +113,79 @@ volumes:
     volumes:
       - mongo:/var/lib/mongo
 volumes:
-  mongo:`,
-}
+  mongo:`
+};
 
 export interface ConstructorArgs {
-  out: Output
-  client: Client
-  env: Environment
-  config: Config
-  definition: PrismaDefinitionClass
-  shouldAskForGenerator: boolean
+  out: Output;
+  client: Client;
+  env: Environment;
+  config: Config;
+  definition: PrismaDefinitionClass;
+  shouldAskForGenerator: boolean;
 }
 
 export class EndpointDialog {
-  out: Output
-  client: Client
-  env: Environment
-  config: Config
-  definition: PrismaDefinitionClass
-  shouldAskForGenerator: boolean
+  out: Output;
+  client: Client;
+  env: Environment;
+  config: Config;
+  definition: PrismaDefinitionClass;
+  shouldAskForGenerator: boolean;
   constructor({
     out,
     client,
     env,
     config,
     definition,
-    shouldAskForGenerator,
+    shouldAskForGenerator
   }: ConstructorArgs) {
-    this.out = out
-    this.client = client
-    this.env = env
-    this.config = config
-    this.definition = definition
-    this.shouldAskForGenerator = shouldAskForGenerator
+    this.out = out;
+    this.client = client;
+    this.env = env;
+    this.config = config;
+    this.definition = definition;
+    this.shouldAskForGenerator = shouldAskForGenerator;
   }
 
   async getEndpoint(): Promise<GetEndpointResult> {
     const localClusterRunning = await this.isClusterOnline(
-      'http://localhost:4466',
-    )
-    const folderName = path.basename(this.config.definitionDir)
-    const loggedIn = await this.client.isAuthenticated()
-    const clusters = this.getCloudClusters()
-    const files = this.listFiles()
-    const hasDockerComposeYml = files.includes('docker-compose.yml')
+      "http://localhost:4466"
+    );
+    const folderName = path.basename(this.config.definitionDir);
+    const loggedIn = await this.client.isAuthenticated();
+    const clusters = this.getCloudClusters();
+    const files = this.listFiles();
+    const hasDockerComposeYml = files.includes("docker-compose.yml");
     const question = this.getClusterQuestion(
       !loggedIn && !localClusterRunning,
       hasDockerComposeYml,
-      clusters,
-    )
+      clusters
+    );
 
-    const { choice } = await this.out.prompt(question)
+    const { choice } = await this.out.prompt(question);
 
     return this.handleChoice({
       choice: this.decodeName(choice),
       loggedIn,
       folderName,
       localClusterRunning,
-      clusters,
-    })
+      clusters
+    });
   }
 
   encodeName(name) {
-    return encodeMap[name] || name
+    return encodeMap[name] || name;
   }
 
   decodeName(name) {
-    let replaced = name
+    let replaced = name;
     Object.keys(decodeMap).forEach(item => {
       if (replaced.includes(item)) {
-        replaced = replaced.replace(item, decodeMap[item])
+        replaced = replaced.replace(item, decodeMap[item]);
       }
-    })
-    return replaced
+    });
+    return replaced;
   }
 
   printDatabaseConfig(credentials: DatabaseCredentials) {
@@ -201,23 +205,23 @@ export class EndpointDialog {
         user: credentials.user,
         password: credentials.password,
         migrations: !credentials.alreadyData,
-        rawAccess: true,
-      }),
-    )
+        rawAccess: true
+      })
+    );
     return yaml
       .safeDump({
         databases: {
-          default: defaultDB,
-        },
+          default: defaultDB
+        }
       })
-      .split('\n')
+      .split("\n")
       .filter(l => l.trim().length > 0)
       .map(l => `        ${l}`)
-      .join('\n')
+      .join("\n");
   }
 
   printDatabaseService(type: DatabaseType) {
-    return databaseServiceDefinitions[type]
+    return databaseServiceDefinitions[type];
   }
 
   async handleChoice({
@@ -225,97 +229,100 @@ export class EndpointDialog {
     loggedIn,
     folderName,
     localClusterRunning,
-    clusters = this.getCloudClusters(),
+    clusters = this.getCloudClusters()
   }: HandleChoiceInput): Promise<GetEndpointResult> {
-    let clusterEndpoint
-    let cluster: Cluster | undefined
-    let workspace: string | undefined
-    let service = 'default'
-    let stage = 'default'
-    let credentials: DatabaseCredentials | undefined
-    let dockerComposeYml = defaultDockerCompose
-    let datamodel = defaultDataModel
-    let newDatabase = false
-    let managementSecret: string | undefined
-    let writeDockerComposeYml = true
+    let clusterEndpoint;
+    let cluster: Cluster | undefined;
+    let workspace: string | undefined;
+    let service = "default";
+    let stage = "default";
+    let credentials: DatabaseCredentials | undefined;
+    let dockerComposeYml = defaultDockerCompose;
+    let datamodel = defaultDataModel;
+    let newDatabase = false;
+    let managementSecret: string | undefined;
+    let writeDockerComposeYml = true;
 
     switch (choice) {
-      case 'Use other server':
-        clusterEndpoint = await this.customEndpointSelector()
-        cluster = new Cluster(this.out, 'custom', clusterEndpoint)
-        const needsAuth = await cluster.needsAuth()
+      case "Use other server":
+        clusterEndpoint = await this.customEndpointSelector();
+        cluster = new Cluster(this.out, "custom", clusterEndpoint);
+        const needsAuth = await cluster.needsAuth();
         if (needsAuth) {
           managementSecret = await this.ask({
-            message: 'Enter the management API secret',
-            key: 'managementSecret',
-            inputType: 'password',
-          })
+            message: "Enter the management API secret",
+            key: "managementSecret",
+            inputType: "password"
+          });
         }
 
         service = await this.ask({
-          message: 'Choose a name for your service',
-          key: 'serviceName',
-          defaultValue: folderName,
-        })
+          message: "Choose a name for your service",
+          key: "serviceName",
+          defaultValue: folderName
+        });
 
         stage = await this.ask({
-          message: 'Choose a name for your stage',
-          key: 'stageName',
-          defaultValue: 'dev',
-        })
+          message: "Choose a name for your stage",
+          key: "stageName",
+          defaultValue: "dev"
+        });
 
-        writeDockerComposeYml = false
+        writeDockerComposeYml = false;
 
-        break
-      case 'local':
-      case 'Create new database':
+        break;
+      case "local":
+      case "Create new database":
         cluster =
-          (this.env.clusters || []).find(c => c.name === 'local') ||
-          new Cluster(this.out, 'local', 'http://localhost:4466')
+          (this.env.clusters || []).find(c => c.name === "local") ||
+          new Cluster(this.out, "local", "http://localhost:4466");
 
         const type =
-          choice === 'Create new database'
+          choice === "Create new database"
             ? await this.askForDatabaseType()
-            : 'mysql'
+            : "mysql";
         const defaultHosts = {
-          mysql: 'mysql',
-          mongo: 'mongo',
-          postgres: 'postgres',
-        }
+          mysql: "mysql",
+          mongo: "mongo",
+          postgres: "postgres"
+        };
         credentials = {
-          user: type === 'mysql' ? 'root' : 'prisma',
-          password: 'prisma',
+          user: type === "mysql" ? "root" : "prisma",
+          password: "prisma",
           type,
           host: defaultHosts[type],
-          port: defaultPorts[type],
-        }
-        dockerComposeYml += this.printDatabaseConfig(credentials)
-        dockerComposeYml += this.printDatabaseService(type)
-        newDatabase = true
-        break
-      case 'Use existing database':
-        credentials = await this.getDatabase()
-        if (credentials.type !== 'mongo') {
-          this.out.log('')
-          const before = Date.now()
+          port: defaultPorts[type]
+        };
+        dockerComposeYml += this.printDatabaseConfig(credentials);
+        dockerComposeYml += this.printDatabaseService(type);
+        newDatabase = true;
+        break;
+      case "Use existing database":
+        credentials = await this.getDatabase();
+        if (credentials.type !== "mongo") {
+          this.out.log("");
+          const before = Date.now();
           this.out.action.start(
             credentials!.alreadyData
               ? `Introspecting database`
-              : `Connecting to database`,
-          )
-        let connector
-        if(credentials.type == 'postgres'){
-            const client = new PGClient(this.replaceLocalDockerHost(credentials))
-            connector = new PostgresConnector(client)
-          } else if(credentials.type == 'mysql'){
-            connector = new MysqlConnector(credentials)
-        }
-          const introspector = new Introspector(connector)
-          let schemas
+              : `Connecting to database`
+          );
+          let connector;
+          let client;
+          if (credentials.type == "postgres") {
+              client = new PGClient(
+              this.replaceLocalDockerHost(credentials)
+            );
+            connector = new PostgresConnector(client);
+          } else if (credentials.type == "mysql") {
+            connector = new MysqlConnector(credentials);
+          }
+          const introspector = new Introspector(connector);
+          let schemas;
           try {
+            schemas = await introspector.listSchemas();
           } catch (e) {
-            schemas = await introspector.listSchemas()
-            throw new Error(`Could not connect to database. ${e.message}`)
+            throw new Error(`Could not connect to database. ${e.message}`);
           }
 
           if (
@@ -324,85 +331,87 @@ export class EndpointDialog {
             schemas &&
             schemas.length > 0
           ) {
-            const schema = credentials.schema || schemas[0]
+            const schema = credentials.schema || schemas[0];
 
-            const { numTables, sdl } = await introspector.introspect(schema)
-            await client.end()
+            const { numTables, sdl } = await introspector.introspect(schema);
+            if (credentials.type == "postgres") {
+              await client.end();
+            }
             if (numTables === 0) {
               this.out.log(
                 chalk.red(
                   `\n${chalk.bold(
-                    'Error: ',
-                  )}The provided database doesn't contain any tables. Please either provide another database or choose "No" for "Does your database contain existing data?"`,
-                ),
-              )
-              this.out.exit(1)
+                    "Error: "
+                  )}The provided database doesn't contain any tables. Please either provide another database or choose "No" for "Does your database contain existing data?"`
+                )
+              );
+              this.out.exit(1);
             }
 
-            this.out.action.stop(prettyTime(Date.now() - before))
+            this.out.action.stop(prettyTime(Date.now() - before));
             this.out.log(
-              `Created datamodel definition based on ${numTables} database tables.`,
-            )
-            datamodel = sdl
+              `Created datamodel definition based on ${numTables} database tables.`
+            );
+            datamodel = sdl;
           } else {
-            this.out.action.stop(prettyTime(Date.now() - before))
+            this.out.action.stop(prettyTime(Date.now() - before));
           }
         }
-        dockerComposeYml += this.printDatabaseConfig(credentials)
-        cluster = new Cluster(this.out, 'custom', 'http://localhost:4466')
-        break
-      case 'Demo server':
-        writeDockerComposeYml = false
+        dockerComposeYml += this.printDatabaseConfig(credentials);
+        cluster = new Cluster(this.out, "custom", "http://localhost:4466");
+        break;
+      case "Demo server":
+        writeDockerComposeYml = false;
 
-        const demoCluster = await this.getDemoCluster()
+        const demoCluster = await this.getDemoCluster();
         if (!demoCluster) {
-          return this.getEndpoint()
+          return this.getEndpoint();
         } else {
-          cluster = demoCluster
+          cluster = demoCluster;
         }
-        break
+        break;
       default:
-        const result = this.getClusterAndWorkspaceFromChoice(choice)
+        const result = this.getClusterAndWorkspaceFromChoice(choice);
         if (!result.workspace) {
-          cluster = clusters.find(c => c.name === result.cluster)
+          cluster = clusters.find(c => c.name === result.cluster);
           if (!loggedIn && cluster && cluster.shared) {
-            workspace = this.getPublicName()
+            workspace = this.getPublicName();
           }
         } else {
           cluster = clusters.find(
             c =>
-              c.name === result.cluster && c.workspaceSlug === result.workspace,
-          )
-          workspace = result.workspace
+              c.name === result.cluster && c.workspaceSlug === result.workspace
+          );
+          workspace = result.workspace;
         }
     }
 
     if (!cluster) {
-      throw new Error(`Oops. Could not get cluster.`)
+      throw new Error(`Oops. Could not get cluster.`);
     }
 
-    this.env.setActiveCluster(cluster!)
+    this.env.setActiveCluster(cluster!);
 
     // TODO propose alternatives if folderName already taken to ensure global uniqueness
     if (
       !cluster.local ||
       (await this.projectExists(cluster, service, stage, workspace))
     ) {
-      service = await this.askForService(folderName)
+      service = await this.askForService(folderName);
     }
 
     if (
       !cluster.local ||
       (await this.projectExists(cluster, service, stage, workspace))
     ) {
-      stage = await this.askForStage('dev')
+      stage = await this.askForStage("dev");
     }
 
     const generator = this.shouldAskForGenerator
       ? await this.askForGenerator()
-      : undefined
+      : undefined;
 
-    workspace = workspace || cluster.workspaceSlug
+    workspace = workspace || cluster.workspaceSlug;
 
     return {
       endpoint: cluster.getApiEndpoint(service, stage, workspace),
@@ -417,68 +426,68 @@ export class EndpointDialog {
       newDatabase,
       managementSecret,
       generator,
-      writeDockerComposeYml,
-    }
+      writeDockerComposeYml
+    };
   }
 
   replaceLocalDockerHost(credentials: DatabaseCredentials) {
     const replaceMap = {
-      'host.docker.internal': 'localhost',
-      'docker.for.mac.localhost': 'localhost',
-    }
+      "host.docker.internal": "localhost",
+      "docker.for.mac.localhost": "localhost"
+    };
     return {
       ...credentials,
-      host: replaceMap[credentials.host] || credentials.host,
-    }
+      host: replaceMap[credentials.host] || credentials.host
+    };
   }
 
   async getDatabase(
-    introspection: boolean = false,
+    introspection: boolean = false
   ): Promise<DatabaseCredentials> {
-    const type = await this.askForDatabaseType(introspection)
+    const type = await this.askForDatabaseType(introspection);
     const alreadyData =
-      type === 'mongo'
+      type === "mongo"
         ? false
-        : introspection || (await this.askForExistingData())
-    const askForSchema = introspection ? true : alreadyData ? true : false
+        : introspection || (await this.askForExistingData());
+    const askForSchema = introspection ? true : alreadyData ? true : false;
     const host = await this.ask({
-      message: 'Enter database host',
-      key: 'host',
-      defaultValue: 'localhost',
-    })
+      message: "Enter database host",
+      key: "host",
+      defaultValue: "localhost"
+    });
     const port = await this.ask({
-      message: 'Enter database port',
-      key: 'port',
-      defaultValue: String(defaultPorts[type]),
-    })
+      message: "Enter database port",
+      key: "port",
+      defaultValue: String(defaultPorts[type])
+    });
     const user = await this.ask({
-      message: 'Enter database user',
-      key: 'user',
-    })
+      message: "Enter database user",
+      key: "user"
+    });
     const password = await this.ask({
-      message: 'Enter database password',
-      key: 'password',
-    })
+      message: "Enter database password",
+      key: "password"
+    });
     const database = await this.ask({
       message: alreadyData
         ? `Enter name of existing database`
         : `Enter database name`,
-      key: 'database',
-    })
-        
+      key: "database"
+    });
+
     const ssl = await this.ask({
-      message: 'Use SSL?',
-      inputType: 'confirm',
-      key: 'ssl',
-    })
-       
-    const schema = 
-      type === 'postgres' && askForSchema
-      ? await this.ask({
-          message: `Enter name of existing schema`,
-          key: 'schema',
-        })
-      : undefined
+      message: "Use SSL?",
+      inputType: "confirm",
+      key: "ssl"
+    });
+
+    const schema =
+      type === "postgres" && askForSchema
+        ? await this.ask({
+            message: `Enter name of existing schema`,
+            key: "schema"
+          })
+        : undefined;
 
     return {
       type,
@@ -489,368 +498,365 @@ export class EndpointDialog {
       database,
       alreadyData,
       schema,
-      ssl,
-    }
+      ssl
+    };
   }
 
   public async selectSchema(schemas: string[]): Promise<string> {
     const choices = schemas.map(s => ({
       value: s,
-      name: s,
-    }))
+      name: s
+    }));
 
     const { choice } = await this.out.prompt({
-      message: 'Please select the Postgres schema you want to introspect',
-      name: 'choice',
-      type: 'list',
+      message: "Please select the Postgres schema you want to introspect",
+      name: "choice",
+      type: "list",
       choices,
-      pageSize: Math.min(choices.length, 20),
-    })
+      pageSize: Math.min(choices.length, 20)
+    });
 
-    return choice
+    return choice;
   }
 
   private getClusterAndWorkspaceFromChoice(
-    choice: string,
+    choice: string
   ): { workspace: string | null; cluster: string } {
-    const splitted = choice.split('/')
-    const workspace = splitted.length > 1 ? splitted[0] : null
-    const cluster = splitted.slice(-1)[0]
+    const splitted = choice.split("/");
+    const workspace = splitted.length > 1 ? splitted[0] : null;
+    const cluster = splitted.slice(-1)[0];
 
-    return { workspace, cluster }
+    return { workspace, cluster };
   }
 
   private getCloudClusters(): Cluster[] {
     if (!this.env.clusters) {
-      return []
+      return [];
     }
-    return this.env.clusters.filter(c => c.shared || c.isPrivate)
+    return this.env.clusters.filter(c => c.shared || c.isPrivate);
   }
 
   private async projectExists(
     cluster: Cluster,
     name: string,
     stage: string,
-    workspace: string | undefined,
+    workspace: string | undefined
   ): Promise<boolean> {
     try {
       return Boolean(
         await this.client.getProject(
           concatName(cluster, name, workspace || null),
-          stage,
-        ),
-      )
+          stage
+        )
+      );
     } catch (e) {
-      return false
+      return false;
     }
   }
 
   private listFiles() {
-    return fs.readdirSync(this.config.definitionDir)
+    return fs.readdirSync(this.config.definitionDir);
   }
 
   private async isClusterOnline(endpoint: string): Promise<boolean> {
-    const cluster = new Cluster(this.out, 'local', endpoint, undefined, true)
-    return cluster.isOnline()
+    const cluster = new Cluster(this.out, "local", endpoint, undefined, true);
+    return cluster.isOnline();
   }
 
   private getClusterQuestion(
     fromScratch: boolean,
     hasDockerComposeYml: boolean,
-    clusters: Cluster[],
+    clusters: Cluster[]
   ) {
     const sandboxChoices = [
       [
-        'Demo server',
-        'Hosted demo environment incl. database (requires login)',
+        "Demo server",
+        "Hosted demo environment incl. database (requires login)"
       ],
       [
-        'Use other server',
-        'Manually provide endpoint of a running Prisma server',
-      ],
-    ]
+        "Use other server",
+        "Manually provide endpoint of a running Prisma server"
+      ]
+    ];
     if (fromScratch && !hasDockerComposeYml) {
       const fixChoices = [
-        ['Use existing database', 'Connect to existing database'],
-        ['Create new database', 'Set up a local database using Docker'],
-      ]
-      const rawChoices = [...fixChoices, ...sandboxChoices]
-      const choices = this.convertChoices(rawChoices)
+        ["Use existing database", "Connect to existing database"],
+        ["Create new database", "Set up a local database using Docker"]
+      ];
+      const rawChoices = [...fixChoices, ...sandboxChoices];
+      const choices = this.convertChoices(rawChoices);
       const finalChoices = [
-        new inquirer.Separator('                       '),
+        new inquirer.Separator("                       "),
         new inquirer.Separator(
           chalk.bold(
-            'You can set up Prisma for local development (based on docker-compose)',
-          ),
+            "You can set up Prisma for local development (based on docker-compose)"
+          )
         ),
         ...choices.slice(0, fixChoices.length),
-        new inquirer.Separator('                       '),
+        new inquirer.Separator("                       "),
         new inquirer.Separator(
-          chalk.bold('Or deploy to an existing Prisma server:'),
+          chalk.bold("Or deploy to an existing Prisma server:")
         ),
-        ...choices.slice(fixChoices.length, 5),
-      ]
+        ...choices.slice(fixChoices.length, 5)
+      ];
       return {
-        name: 'choice',
-        type: 'list',
+        name: "choice",
+        type: "list",
         // message: `Connect to your database, set up a new one or use hosted sandbox?`,
         message: `Set up a new Prisma server or deploy to an existing server?`,
         choices: finalChoices,
-        pageSize: finalChoices.length,
-      }
+        pageSize: finalChoices.length
+      };
     } else {
       const clusterChoices =
         clusters.length > 0
           ? clusters.filter(c => !c.shared).map(this.getClusterChoice)
-          : sandboxChoices
+          : sandboxChoices;
       const rawChoices = [
-        ['Use existing database', 'Connect to existing database'],
-        ['Create new database', 'Set up a local database using Docker'],
+        ["Use existing database", "Connect to existing database"],
+        ["Create new database", "Set up a local database using Docker"],
         ...clusterChoices,
         [
-          'Demo server',
-          'Hosted demo environment incl. database (requires login)',
+          "Demo server",
+          "Hosted demo environment incl. database (requires login)"
         ],
         [
-          'Use other server',
-          'Manually provide endpoint of a running Prisma server',
-        ],
-      ]
-      const choices = this.convertChoices(rawChoices)
+          "Use other server",
+          "Manually provide endpoint of a running Prisma server"
+        ]
+      ];
+      const choices = this.convertChoices(rawChoices);
       const dockerChoices = hasDockerComposeYml
         ? []
         : [
             new inquirer.Separator(
               chalk.bold(
-                'Set up a new Prisma server for local development (based on docker-compose):',
-              ),
+                "Set up a new Prisma server for local development (based on docker-compose):"
+              )
             ),
-            ...choices.slice(0, 2),
-          ]
+            ...choices.slice(0, 2)
+          ];
       const finalChoices = [
-        new inquirer.Separator('                       '),
+        new inquirer.Separator("                       "),
         ...dockerChoices,
-        new inquirer.Separator('                       '),
+        new inquirer.Separator("                       "),
         new inquirer.Separator(
-          chalk.bold('Or deploy to an existing Prisma server:'),
+          chalk.bold("Or deploy to an existing Prisma server:")
         ),
-        ...choices.slice(2),
-      ]
+        ...choices.slice(2)
+      ];
       return {
-        name: 'choice',
-        type: 'list',
+        name: "choice",
+        type: "list",
         message: `Set up a new Prisma server or deploy to an existing server?`,
         choices: finalChoices,
-        pageSize: finalChoices.length,
-      }
+        pageSize: finalChoices.length
+      };
     }
   }
 
   private getClusterName(c: Cluster): string {
-    return `${c.workspaceSlug ? `${c.workspaceSlug}/` : ''}${this.encodeName(
-      c.name,
-    )}`
+    return `${c.workspaceSlug ? `${c.workspaceSlug}/` : ""}${this.encodeName(
+      c.name
+    )}`;
   }
 
   private getClusterChoice = (c: Cluster): string[] => {
-    return [this.getClusterName(c), this.getClusterDescription(c)]
-  }
+    return [this.getClusterName(c), this.getClusterDescription(c)];
+  };
 
   private async getDemoCluster(): Promise<Cluster | null> {
-    const isAuthenticated = await this.client.isAuthenticated()
+    const isAuthenticated = await this.client.isAuthenticated();
     if (!isAuthenticated) {
-      await this.client.login()
+      await this.client.login();
     }
-    return this.askForDemoCluster()
+    return this.askForDemoCluster();
   }
 
   private async askForDemoCluster(): Promise<Cluster> {
-    const eu1Ping = await getPing('EU_WEST_1')
-    const us1Ping = await getPing('US_WEST_2')
+    const eu1Ping = await getPing("EU_WEST_1");
+    const us1Ping = await getPing("US_WEST_2");
     const clusters = this.getCloudClusters().filter(
-      c => c.name === 'prisma-eu1' || c.name === 'prisma-us1',
-    )
+      c => c.name === "prisma-eu1" || c.name === "prisma-us1"
+    );
 
     const rawChoices = clusters.map(c => {
-      const clusterName = this.getClusterName(c)
-      const clusterRegion = c.name === 'prisma-eu1' ? `eu-west-1` : `us-west-2`
+      const clusterName = this.getClusterName(c);
+      const clusterRegion = c.name === "prisma-eu1" ? `eu-west-1` : `us-west-2`;
       const pingTime =
-        c.name === 'prisma-eu1' ? eu1Ping.toFixed() : us1Ping.toFixed()
+        c.name === "prisma-eu1" ? eu1Ping.toFixed() : us1Ping.toFixed();
       return [
         clusterName,
-        `Hosted on AWS in ${clusterRegion} using MySQL [${pingTime}ms latency]`,
-      ]
-    })
-    const choices = this.convertChoices(rawChoices)
+        `Hosted on AWS in ${clusterRegion} using MySQL [${pingTime}ms latency]`
+      ];
+    });
+    const choices = this.convertChoices(rawChoices);
 
     const { cluster } = await this.out.prompt({
-      name: 'cluster',
-      type: 'list',
+      name: "cluster",
+      type: "list",
       message: `Choose the region of your demo server`,
-      choices,
-    })
+      choices
+    });
     return clusters.find(c => {
-      const clusterName = this.getClusterName(c)
-      return clusterName === cluster
-    })!
+      const clusterName = this.getClusterName(c);
+      return clusterName === cluster;
+    })!;
   }
 
   private getClusterDescription(c: Cluster) {
     if (c.shared) {
-      return 'Free development server on Prisma Cloud (incl. database)'
+      return "Free development server on Prisma Cloud (incl. database)";
     }
 
-    return `Production Prisma cluster`
+    return `Production Prisma cluster`;
   }
 
   private async askForDatabaseType(introspect: boolean = false) {
-    const choices: any[] = []
-
-
-    choices.push({
-      value: 'mysql',
-      name:
-        'MySQL             MySQL compliant databases like MySQL or MariaDB',
-      short: 'MySQL',
-    })
-    
+    const choices: any[] = [];
 
     choices.push({
-      value: 'postgres',
-      name: 'PostgreSQL        PostgreSQL database',
-      short: 'PostgreSQL',
-    })
+      value: "mysql",
+      name: "MySQL             MySQL compliant databases like MySQL or MariaDB",
+      short: "MySQL"
+    });
 
     choices.push({
-      value: 'mongo',
-      name: 'MongoDB           Mongo Database',
-      short: 'MongoDB',
-    })
+      value: "postgres",
+      name: "PostgreSQL        PostgreSQL database",
+      short: "PostgreSQL"
+    });
+
+    choices.push({
+      value: "mongo",
+      name: "MongoDB           Mongo Database",
+      short: "MongoDB"
+    });
 
     const { dbType } = await this.out.prompt({
-      name: 'dbType',
-      type: 'list',
+      name: "dbType",
+      type: "list",
       message: `What kind of database do you want to ${
-        introspect ? 'introspect' : 'deploy to'
+        introspect ? "introspect" : "deploy to"
       }?`,
-      choices,
+      choices
       // pageSize: 9,
-    })
+    });
 
-    return dbType
+    return dbType;
   }
 
   private convertChoices(
-    choices: string[][],
+    choices: string[][]
   ): Array<{ value: string; name: string }> {
-    const padded = this.out.printPadded(choices, 0, 6).split('\n')
+    const padded = this.out.printPadded(choices, 0, 6).split("\n");
     return padded.map((name, index) => ({
       name,
       value: choices[index][0],
-      short: choices[index][0],
-    }))
+      short: choices[index][0]
+    }));
   }
 
   private async askForStage(defaultName: string): Promise<string> {
     const question = {
-      name: 'stage',
-      type: 'input',
-      message: 'Choose a name for your stage',
-      default: defaultName,
-    }
+      name: "stage",
+      type: "input",
+      message: "Choose a name for your stage",
+      default: defaultName
+    };
 
-    const { stage } = await this.out.prompt(question)
+    const { stage } = await this.out.prompt(question);
 
-    return stage
+    return stage;
   }
 
   private async askForGenerator(): Promise<string> {
     const choices = [
       {
-        name: 'Prisma TypeScript Client',
-        value: 'typescript-client',
+        name: "Prisma TypeScript Client",
+        value: "typescript-client"
       },
       {
-        name: 'Prisma Flow Client',
-        value: 'flow-client',
+        name: "Prisma Flow Client",
+        value: "flow-client"
       },
       {
-        name: 'Prisma JavaScript Client',
-        value: 'javascript-client',
+        name: "Prisma JavaScript Client",
+        value: "javascript-client"
       },
       {
-        name: 'Prisma Go Client',
-        value: 'go-client',
+        name: "Prisma Go Client",
+        value: "go-client"
       },
       {
         name: `Don't generate`,
-        value: 'no-generation',
-      },
-    ]
+        value: "no-generation"
+      }
+    ];
 
     const { generator } = await this.out.prompt({
-      name: 'generator',
-      type: 'list',
+      name: "generator",
+      type: "list",
       message:
-        'Select the programming language for the generated Prisma client',
+        "Select the programming language for the generated Prisma client",
       pageSize: choices.length,
-      choices,
-    })
+      choices
+    });
 
-    return generator
+    return generator;
   }
 
   private async askForService(defaultName: string): Promise<string> {
     const question = {
-      name: 'service',
-      type: 'input',
-      message: 'Choose a name for your service',
-      default: defaultName,
-    }
+      name: "service",
+      type: "input",
+      message: "Choose a name for your service",
+      default: defaultName
+    };
 
-    const { service } = await this.out.prompt(question)
+    const { service } = await this.out.prompt(question);
 
-    return service
+    return service;
   }
 
   private async customEndpointSelector(): Promise<string> {
     const question = {
-      name: 'endpoint',
-      type: 'input',
-      message: `Enter the endpoint of your Prisma server`,
-    }
+      name: "endpoint",
+      type: "input",
+      message: `Enter the endpoint of your Prisma server`
+    };
 
-    const { endpoint } = await this.out.prompt(question)
+    const { endpoint } = await this.out.prompt(question);
 
-    return endpoint
+    return endpoint;
   }
 
   private async askForExistingData(): Promise<boolean> {
     const question = {
-      name: 'existingData',
-      type: 'list',
+      name: "existingData",
+      type: "list",
       message: `Does your database contain existing data?`,
       choices: [
         {
-          value: 'no',
-          name: 'No',
+          value: "no",
+          name: "No"
         },
         {
-          value: 'yes',
-          name: 'Yes (experimental - Prisma migrations not yet supported)',
-          short: 'Yes',
+          value: "yes",
+          name: "Yes (experimental - Prisma migrations not yet supported)",
+          short: "Yes"
         },
         new inquirer.Separator(
           `\n\n${chalk.yellow(
-            'Warning: Introspecting databases with existing data is currently an experimental feature. If you find any issues, please report them here: https://github.com/prisma/prisma/issues\n',
-          )}`,
-        ),
+            "Warning: Introspecting databases with existing data is currently an experimental feature. If you find any issues, please report them here: https://github.com/prisma/prisma/issues\n"
+          )}`
+        )
       ],
-      pageSize: 10,
-    }
+      pageSize: 10
+    };
 
-    const { existingData } = await this.out.prompt(question)
-    return existingData === 'yes'
+    const { existingData } = await this.out.prompt(question);
+    return existingData === "yes";
   }
 
   private async ask({
@@ -859,14 +865,14 @@ export class EndpointDialog {
     key,
     validate,
     required,
-    inputType = 'input',
+    inputType = "input"
   }: {
-    message: string
-    key: string
-    defaultValue?: string
-    validate?: (value: string) => boolean | string
-    required?: boolean
-    inputType?: string
+    message: string;
+    key: string;
+    defaultValue?: string;
+    validate?: (value: string) => boolean | string;
+    required?: boolean;
+    inputType?: string;
   }) {
     const question = {
       name: key,
@@ -880,22 +886,22 @@ export class EndpointDialog {
             (value =>
               value && value.length > 0
                 ? true
-                : `Please provide a valid ${key}`),
-    }
+                : `Please provide a valid ${key}`)
+    };
 
-    const result = await this.out.prompt(question)
+    const result = await this.out.prompt(question);
 
-    return result[key]
+    return result[key];
   }
 
   private getSillyName() {
-    return `${slugify(sillyname()).split('-')[0]}-${Math.round(
-      Math.random() * 1000,
-    )}`
+    return `${slugify(sillyname()).split("-")[0]}-${Math.round(
+      Math.random() * 1000
+    )}`;
   }
 
   private getPublicName() {
-    return `public-${this.getSillyName()}`
+    return `public-${this.getSillyName()}`;
   }
 }
 
@@ -903,9 +909,9 @@ function slugify(text) {
   return text
     .toString()
     .toLowerCase()
-    .replace(/\s+/g, '-') // Replace spaces with -
-    .replace(/[^\w\-]+/g, '') // Remove all non-word chars
-    .replace(/\-\-+/g, '-') // Replace multiple - with single -
-    .replace(/^-+/, '') // Trim - from start of text
-    .replace(/-+$/, '') // Trim - from end of text
+    .replace(/\s+/g, "-") // Replace spaces with -
+    .replace(/[^\w\-]+/g, "") // Remove all non-word chars
+    .replace(/\-\-+/g, "-") // Replace multiple - with single -
+    .replace(/^-+/, "") // Trim - from start of text
+    .replace(/-+$/, ""); // Trim - from end of text
 }

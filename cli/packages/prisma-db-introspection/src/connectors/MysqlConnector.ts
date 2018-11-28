@@ -8,7 +8,6 @@ import {
   MysqlConnectionDetails,
 } from '../types/common'
 import * as _ from 'lodash'
-import { Client } from 'pg'
 import { createConnection, Connection, Query, ConnectionOptions } from 'mysql2';
 
 // Responsible for extracting a normalized representation of a PostgreSQL database (schema)

@@ -1,0 +1,39 @@
+type CloudSecret @pgTable(name: "CloudSecret") {
+  id: ID! @unique @pgColumn(name: "secret")
+}
+
+type InternalMigration @pgTable(name: "InternalMigration") {
+  id: ID! @unique
+  appliedAt: DateTime!
+}
+
+type Migration @pgTable(name: "Migration") {
+  applied: Int!
+  errors: String!
+  finishedAt: DateTime!
+  functions: String!
+  project: Project @pgRelation(column: "projectId")
+  revision: Int!
+  rolledBack: Int!
+  schema: String!
+  startedAt: DateTime!
+  # status: null! # Type 'enum' is not yet supported.
+  steps: String!
+}
+
+type Project @pgTable(name: "Project") {
+  id: ID! @unique
+  Migrations: [Migration!]!
+  allowMutations: Boolean!
+  allowQueries: Boolean!
+  functions: String!
+  ownerId: String!
+  seats: String!
+  secrets: String!
+  webhookUrl: String!
+}
+
+type TelemetryInfo @pgTable(name: "TelemetryInfo") {
+  id: ID! @unique
+  lastPinged: DateTime!
+}

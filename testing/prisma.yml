@@ -1,1 +1,2 @@
-endpoint: http://localhost:3306
+endpoint: http://localhost:4466
+datamodel: datamodel-1543413295007.prisma
